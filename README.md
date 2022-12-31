@@ -9,3 +9,7 @@ Includes:
 
 ###Function Pointer
 
+###Other Implementations
+
+1. Implemented count lines of code using cloc and SLOCCount Plugin
+
