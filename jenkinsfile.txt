@@ -1,0 +1,26 @@
+pipeline
+{
+    agent any
+    
+    stages{
+        stage('Github checkout'){
+            steps{
+                echo 'Hello World!!'
+                checkout([$class: 'GitSCM', branches: [[name: '*/master']], extensions: [[$class: 'SubmoduleOption', disableSubmodules: false, parentCredentials: false, recursiveSubmodules: true, reference: '', trackingSubmodules: false, depth: 1, shallow: true], [$class: 'CloneOption', depth: 1, noTags: true, reference: '', shallow: true], [$class: 'CleanBeforeCheckout', deleteUntrackedNestedRepositories: true]], userRemoteConfigs: [[credentialsId: '8fd1e5c0-f1cc-434d-9be7-e0b172d084a6', url: 'https://github.com/thb67w/ccmvvksh.git']]])
+   
+            }
+        }
+        stage('Generate cloc Report'){
+            steps{
+                echo 'In Build Stage!!'
+                bat label: '', script: """cd $WORKSPACE\\softwares
+                 cloc-1.64.exe --by-file --xml --out=$WORKSPACE\\cloc.xml $WORKSPACE\\FunctionPointer"""
+            }
+        }
+       stage ("Publish cloc Report") {
+        steps{
+             sloccountPublish encoding: '', pattern: '*.xml'
+            }
+        }
+    }
+}
