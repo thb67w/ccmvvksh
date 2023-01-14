@@ -1,0 +1,269 @@
+node ("BuildEUWS2648") {
+    try { 
+        stage('Checkout') { // for display purposes
+        // Get some code from Bitbucket
+        cleanWs()
+        // ,[$class: 'CleanBeforeCheckout']
+        //bat label: 'Removing other git files. Clean old build.', returnStatus: true, script: 'git ls-files -o -z | xargs -0 rm'
+          checkout([$class: 'GitSCM', branches: [[name: '*/develop']], extensions: [[$class: 'SubmoduleOption', disableSubmodules: false, parentCredentials: false, recursiveSubmodules: true, reference: '', trackingSubmodules: false, depth: 1, shallow: true], [$class: 'CloneOption', depth: 1, noTags: true, reference: '', shallow: true], [$class: 'CleanBeforeCheckout', deleteUntrackedNestedRepositories: true]], userRemoteConfigs: [[credentialsId: '5905aaab-9c83-4b57-8ad9-232313e635dc', url: 'ssh://git@sw-depot.int.electrolux.com:7999/ueswadepl/cluster1_topaz_iolite_indigo.git']]])
+          notifyBitbucket(buildStatus: 'INPROGRESS')  // Notifies the Bitbucket instance of an INPROGRESS build
+        }
+    }
+  	catch (e) {
+        echo "Checkout failed."
+        currentBuild.result='FAILURE'
+    }
+
+    try {
+        stage('Target build') {
+            cmakeBuild buildDir: 'build\\Target', buildType: 'Target', cleanBuild: true, cmakeArgs: '-DCMAKE_TOOLCHAIN_FILE:STRING=DevTools\\ToolChain\\toolchain-iar-ARM.cmake', generator: 'Ninja', installation: 'Cmake', steps: [[args: '-j 12']]
+            recordIssues enabledForFailure: true, publishAllIssues: true, skipPublishingChecks: true, tools: [iar()]
+            cmake arguments: '--build . --target -j 12', installation: 'Cmake', workingDir: 'build\\Target'
+        }
+    } catch (e) {
+        echo "Target build failed."
+        currentBuild.result='FAILURE'
+    }
+    try {
+        stage('Target HIL') {
+            cmakeBuild buildDir: 'build\\Target_HIL', buildType: 'Target', cleanBuild: true, cmakeArgs: '-DCMAKE_TOOLCHAIN_FILE:STRING=DevTools\\ToolChain\\toolchain-iar-ARM.cmake -DTARGET_BOARD:STRING=HIL_SUPERSET', generator: 'Ninja', installation: 'Cmake', steps: [[args: '-j 12']]
+            //recordIssues enabledForFailure: true, publishAllIssues: true, skipPublishingChecks: true, tools: [iar()]
+            //cmake arguments: '--build . --target -j 12', installation: 'Cmake', workingDir: 'build\\Target_HIL'
+        }
+    } catch (e) {
+        echo "Target HIL failed."
+        currentBuild.result='FAILURE'
+    }
+    try {
+        stage('UnitTest build') {
+            cmakeBuild buildDir: 'build\\UnitTest', buildType: 'UnitTest', cleanBuild: true, cmakeArgs: '-DCMAKE_TOOLCHAIN_FILE:STRING=DevTools\\ToolChain\\toolchain-tdm64.cmake', generator: 'MinGW Makefiles', installation: 'Cmake', steps: [[args: '-j 12']]
+        }
+    } catch (e) {
+        echo "UnitTest build failed."
+        currentBuild.result='FAILURE'
+    }
+   try {
+        stage('UnitTest execution') {
+            ctest arguments: '-j 12', installation: 'Cmake', workingDir: 'build\\UnitTest'
+        }
+    } catch (e) {
+        echo "UnitTest execution failed."
+        currentBuild.result='FAILURE'
+    }
+    try 
+    {
+	    stage ('Upload Artifacts to Artifactory')
+        {
+            bat label: '', script: "cd d:\\jenkins\\Slave1\\workspace\\${JOB_NAME}\\"
+            bat label: '', script: '''del CLUSTER1_Topaz_Iolite_Indigo.zip
+            rmdir /s /q CLUSTER1_Topaz_Iolite_Indigo
+            mkdir CLUSTER1_Topaz_Iolite_Indigo
+            cd .\\CLUSTER1_Topaz_Iolite_Indigo
+            mkdir Target_Topaz_Iolite_Indigo
+            mkdir Target_HIL_Adapter
+            cd ..
+
+            copy .\\build\\Target\\output\\CLUSTER1_Topaz_Iolite_Indigo.elf .\\CLUSTER1_Topaz_Iolite_Indigo\\Target_Topaz_Iolite_Indigo\\CLUSTER1_Topaz_Iolite_Indigo.elf
+            copy .\\build\\Target\\output\\CLUSTER1_Topaz_Iolite_Indigo.elf.xym .\\CLUSTER1_Topaz_Iolite_Indigo\\Target_Topaz_Iolite_Indigo\\CLUSTER1_Topaz_Iolite_Indigo.elf.xym
+            copy .\\build\\Target\\output\\CLUSTER1_Topaz_Iolite_Indigo.map .\\CLUSTER1_Topaz_Iolite_Indigo\\Target_Topaz_Iolite_Indigo\\CLUSTER1_Topaz_Iolite_Indigo.map
+            copy .\\build\\Target\\output\\CLUSTER1_Topaz_Iolite_Indigo.srec .\\CLUSTER1_Topaz_Iolite_Indigo\\Target_Topaz_Iolite_Indigo\\CLUSTER1_Topaz_Iolite_Indigo.srec
+
+            copy .\\build\\Target_HIL\\output\\CLUSTER1_Topaz_Iolite_Indigo.elf .\\CLUSTER1_Topaz_Iolite_Indigo\\Target_HIL_Adapter\\CLUSTER1_HIL_Adapter.elf
+            copy .\\build\\Target_HIL\\output\\CLUSTER1_Topaz_Iolite_Indigo.elf.xym .\\CLUSTER1_Topaz_Iolite_Indigo\\Target_HIL_Adapter\\CLUSTER1_HIL_Adapter.xym
+            copy .\\build\\Target_HIL\\output\\CLUSTER1_Topaz_Iolite_Indigo.map .\\CLUSTER1_Topaz_Iolite_Indigo\\Target_HIL_Adapter\\CLUSTER1_HIL_Adapter.map
+            copy .\\build\\Target_HIL\\output\\CLUSTER1_Topaz_Iolite_Indigo-raw.srec .\\CLUSTER1_Topaz_Iolite_Indigo\\Target_HIL_Adapter\\CLUSTER1_HIL_Adapter-raw.srec
+            copy .\\build\\Target_HIL\\output\\CLUSTER1_Topaz_Iolite_Indigo.srec .\\CLUSTER1_Topaz_Iolite_Indigo\\Target_HIL_Adapter\\CLUSTER1_HIL_Adapter.srec
+
+            '''
+            zip zipFile: 'CLUSTER1_Topaz_Iolite_Indigo.zip', dir: "D:\\jenkins\\Slave1\\workspace\\${JOB_NAME}\\CLUSTER1_Topaz_Iolite_Indigo"
+            def server = Artifactory.server 'artifactory-server'
+            def uploadSpec = """{
+                "files": [
+                {
+                "pattern": "D:\\jenkins\\Slave1\\workspace\\${JOB_NAME}\\CLUSTER1_Topaz_Iolite_Indigo.zip",
+                "target": "GTO_UESWA_snapshot_local/develop/${JOB_NAME}/${BUILD_NUMBER}/CLUSTER1_Topaz_Iolite_Indigo.zip"
+                }
+                ]
+            }"""
+            server.upload spec: uploadSpec
+        }
+    } catch (e) {
+        echo "Artifact Upload failed."
+        currentBuild.result='FAILURE'
+    }
+    stage('Publish and email results') {
+        archiveArtifacts artifacts: 'CLUSTER1_Topaz_Iolite_Indigo/Target_Topaz_Iolite_Indigo/CLUSTER1_Topaz_Iolite_Indigo.elf,CLUSTER1_Topaz_Iolite_Indigo/Target_Topaz_Iolite_Indigo/CLUSTER1_Topaz_Iolite_Indigo.elf.xym,CLUSTER1_Topaz_Iolite_Indigo/Target_Topaz_Iolite_Indigo/CLUSTER1_Topaz_Iolite_Indigo.map,CLUSTER1_Topaz_Iolite_Indigo/Target_Topaz_Iolite_Indigo/CLUSTER1_Topaz_Iolite_Indigo.srec,CLUSTER1_Topaz_Iolite_Indigo/Target_HIL_Adapter/CLUSTER1_HIL_Adapter.elf,CLUSTER1_Topaz_Iolite_Indigo/Target_HIL_Adapter/CLUSTER1_HIL_Adapter.xym,CLUSTER1_Topaz_Iolite_Indigo/Target_HIL_Adapter/CLUSTER1_HIL_Adapter.map,CLUSTER1_Topaz_Iolite_Indigo/Target_HIL_Adapter/CLUSTER1_HIL_Adapter-raw.srec,CLUSTER1_Topaz_Iolite_Indigo/Target_HIL_Adapter/CLUSTER1_HIL_Adapter.srec,build/Test/UIC.c', followSymlinks: false, onlyIfSuccessful: false
+        //publishHTML([allowMissing: true, alwaysLinkToLastBuild: false, keepAll: false, reportDir: 'build/Test/CLUSTER1_Topaz_Iolite_Indigo_coverage', reportFiles: 'index.html', reportName: 'Cluster1 Platform Test coverage report', reportTitles: 'Cluster1 Platform Test coverage report'])
+        //publishHTML([allowMissing: true, alwaysLinkToLastBuild: false, keepAll: false, reportDir: 'build/UnitTest/CLUSTER1_Topaz_Iolite_Indigo_fullcoverage', reportFiles: 'index.html', reportName: 'Cluster1 Unit Test Full coverage report', reportTitles: 'Cluster1 Unit Test Full coverage report'])
+        try {
+            //step([$class: 'XUnitPublisher', testTimeMargin: '3000', thresholdMode: 1, thresholds: [], tools: [GoogleTest(excludesPattern: '**/build/Test/*', pattern: '**/googletest_*UnitTest.xml', stopProcessingIfError: true)]])
+            step([$class: 'XUnitPublisher', testTimeMargin: '3000', thresholdMode: 1, thresholds: [], tools: [GoogleTest(pattern: '**/googletest_*.xml', stopProcessingIfError: true)]])
+        } catch (e) {
+            echo "Publishing unit tests failed."
+            currentBuild.result='FAILURE'
+        }
+        emailext body: '''$PROJECT_NAME - Build # $BUILD_NUMBER - $BUILD_STATUS:
+
+Reason for build:
+${BUILD_CAUSE}
+
+Check console output at $BUILD_URL to view the results.
+
+Use below link to download binaries.
+https://sdlcartifacts.electrolux.com/artifactory/GTO_UESWA_snapshot_local/develop/${JOB_NAME}/${BUILD_NUMBER}/CLUSTER1_Topaz_Iolite_Indigo.zip
+
+Changes since last success:
+${CHANGES_SINCE_LAST_SUCCESS, showPaths=true}
+Changes since last build:
+${CHANGES_SINCE_LAST_BUILD, showPaths=true, format="[%a] [%d] [%r] %m\\n"}
+
+Test result:
+Total: ${TEST_COUNTS,var="total"}
+Passed: ${TEST_COUNTS,var="pass"}
+Failed: ${TEST_COUNTS,var="fail"}
+Skipped: ${TEST_COUNTS,var="skip"}
+
+${FAILED_TESTS}
+
+${BUILD_LOG, maxLines=50, escapeHtml=true}''', recipientProviders: [buildUser(), culprits(), requestor(), developers(), brokenBuildSuspects(), brokenTestsSuspects(), upstreamDevelopers()], subject: '${DEFAULT_SUBJECT}'
+    }
+    notifyBitbucket(buildStatus: currentBuild.result)
+ }
+
+timeout(40) //expected to be completed in max 40 mins
+{
+node ("BuildHilTWD2814") 
+{
+	try 
+	{ 
+		stage('Download ADAPTER FW, SOCKET FW and TESTS.dll from Artifactory ') 
+		{ 
+		    bat label: '', script: '''cd c:\\
+			rmdir /s/q downloadingFolder
+			mkdir downloadingFolder
+			cd C:\\downloadingFolder
+			'''
+			rtDownload (
+                serverId: 'artifactory-server',
+                spec: '''{
+                      "files": [
+                        {
+                           "pattern": "GTO_UESWA_release_local/release/HIL_official_data/HIL_data.zip",
+                           "target": "C:\\downloadingFolder\\HIL_data.zip"
+                        }
+                      ]
+                }''',
+            )
+			
+			rtDownload (
+                serverId: 'artifactory-server',
+                spec: '''{
+                      "files": [
+                        {
+                           "pattern": "GTO_UESWA_snapshot_local/develop/${JOB_NAME}/${BUILD_NUMBER}/CLUSTER1_Topaz_Iolite_Indigo.zip",
+                           "target": "C:\\downloadingFolder\\CLUSTER1_Topaz_Iolite_Indigo.zip"
+                        }
+                      ]
+                }''',
+            )
+             
+            sleep 120 // seconds
+            
+            unzip dir: "C:\\downloadingFolder", glob: '', zipFile: "C:\\downloadingFolder\\release\\HIL_official_data\\HIL_data.zip"
+			unzip dir: "C:\\downloadingFolder", glob: '', zipFile: "C:\\downloadingFolder\\develop\\${JOB_NAME}\\${BUILD_NUMBER}\\CLUSTER1_Topaz_Iolite_Indigo.zip"
+
+			bat label: '', script: '''
+			cd C:\\downloadingFolder
+			
+			copy /b/v/y .\\Target_HIL_Adapter\\CLUSTER1_HIL_Adapter.elf C:\\HIL\\WORKING\\CLUSTER1_HIL_Adapter.elf
+			copy /b/v/y .\\Target_HIL_Adapter\\CLUSTER1_HIL_Adapter.xym C:\\HIL\\WORKING\\CLUSTER1_HIL_Adapter.xym 
+			copy /b/v/y .\\Target_HIL_Adapter\\CLUSTER1_HIL_Adapter.map C:\\HIL\\WORKING\\CLUSTER1_HIL_Adapter.map
+			copy /b/v/y .\\Target_HIL_Adapter\\CLUSTER1_HIL_Adapter-raw.srec C:\\HIL\\WORKING\\CLUSTER1_HIL_Adapter-raw.srec 
+			copy /b/v/y .\\Target_HIL_Adapter\\CLUSTER1_HIL_Adapter.srec C:\\HIL\\WORKING\\CLUSTER1_HIL_Adapter.srec
+			
+			copy /b/v/y .\\HIL_data\\SOCKET\\LLR.1040.elf C:\\HIL\\WORKING\\CLUSTER1_HIL_Socket.elf
+			copy /b/v/y .\\HIL_data\\SOCKET\\LLR.1040.srec C:\\HIL\\WORKING\\CLUSTER1_HIL_Socket.srec 
+			copy /b/v/y .\\HIL_data\\SOCKET\\LLR.1040.xym C:\\HIL\\WORKING\\CLUSTER1_HIL_Socket.xym
+			
+			copy /b/v/y .\\HIL_data\\TESTS\\HilSupersetTestLib.dll C:\\HIL\\WORKING\\HilSupersetTestLib.dll
+			copy /b/v/y .\\HIL_data\\TESTS\\Tests.dll C:\\HIL\\WORKING\\Tests.dll
+			
+			'''
+
+		}
+	}
+	catch (e) {
+		echo "Checkout failed."
+		currentBuild.result='FAILURE'
+	}
+	
+	try 
+	{ 
+		stage('Flash Adapter') 
+		{ 
+			bat label: '', script: '''cd c:\\HIL\\WORKING
+		    C:\\HIL\\TOOLS\\SEGGER\\x86_64\\FlashAdapterMicro.bat MKE17z256xxx7 CLUSTER1_HIL_Adapter.srec
+			'''
+		}
+	}
+	catch (e) {
+		echo "Checkout failed."
+		currentBuild.result='FAILURE'
+	}
+
+	try 
+	{ 
+		stage('Flash Socket') 
+		{ 
+			bat label: '', script: '''cd c:\\HIL\\WORKING
+			C:\\HIL\\TOOLS\\SEGGER\\x86_64\\FlashSocketMicro.bat stm32f427zi CLUSTER1_HIL_Socket.srec 
+			'''
+		}
+	}
+	catch (e) {
+		echo "Checkout failed."
+		currentBuild.result='FAILURE'
+	}
+
+	try 
+	{ 
+		stage('Run test on HIL SETUP') 
+		{
+			bat label: '', script: '''cd c:\\HIL\\WORKING
+			del TestResult.xml
+			nunit3-console C:\\HIL\\WORKING\\Tests.dll  --x86
+			'''
+		}
+	}
+	catch (e) {
+		echo "Checkout failed."
+		currentBuild.result='FAILURE'
+	}
+	
+	try 
+	{
+        stage ('Upload TestResult.xml to Artifactory')
+        {
+            def server = Artifactory.server 'artifactory-server'
+            def uploadSpec = """{
+                "files": [
+                {
+                "pattern": "C:\\HIL\\WORKING\\TestResult.xml",
+                "target": "GTO_UESWA_snapshot_local/develop/${JOB_NAME}/${BUILD_NUMBER}/TestResult.xml"
+                }
+                ]
+            }"""
+            server.upload spec: uploadSpec
+            bat label: '', script: "cd c:\\jenkins\\Slave1\\workspace\\${JOB_NAME}"
+            bat label: '', script: '''
+            copy /b/v/y C:\\HIL\\WORKING\\TestResult.xml TestResult.xml          
+            '''
+            archiveArtifacts artifacts: 'TestResult.xml', followSymlinks: false, onlyIfSuccessful: false
+            nunit testResultsPattern: 'TestResult.xml'
+        }
+    } catch (e) {
+        echo "Artifact Upload failed."
+        currentBuild.result='FAILURE'
+    }	
+}
+}
