@@ -1,6 +1,7 @@
 pipeline {
   agent any
-
+  //def branch = env.BRANCH_NAME
+  //echo "branch1  = ${branch}"
   stages {
     stage("Hello") {
       steps {
@@ -10,8 +11,8 @@ pipeline {
     stage("Branch Test") {
       when {
         // skip this stage unless branch is NOT master
-        not {
-          branch "master"
+        expression {
+          return (env.BRANCH_NAME != "develop")
         }
       }
       steps {
