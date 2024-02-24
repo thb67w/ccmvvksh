@@ -1,0 +1,15 @@
+echo "Hello Shell script"
+
+if [ $new_branch == $branch ]]; then
+
+  #cd /d/DevOps/tagging/
+  cd /d/jenkins/Slave1/workspace/Tag-clustera_ui
+  rm -rf $repo
+  printf "%s\n" "$url" "$branch" "$repo" "$new_branch" "$tag" "$yes" sh submoduletag ui.sh
+
+else
+
+ #cd /d/jenkins/tagging/
+ cd /d/jenkins/Slave1/workspace/Tag-clustera_ui
+ rm -rf $repo
+ printf "%s\n" "$url" "$branch" "$repo" "$new_branch" "$yes" "$new_branch" "$tag" "$yes" | sh submoduletag ui.sh
